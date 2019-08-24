@@ -8,6 +8,63 @@ This trade-off allows the hierarchy to be constructed lazily with very convenien
 
 use super::*;
 
+use std::str;
+
+//----------------------------------------------------------------
+
+/// Tokenise command-like argument strings.
+///
+/// ```
+/// use cvar::console::tokenise;
+/// let tokens = tokenise("command 42 'string arg with spaces'").collect::<Vec<_>>();
+/// assert_eq!(tokens, &["command", "42", "string arg with spaces"]);
+/// ```
+pub fn tokenise<'a>(s: &'a str) -> impl Clone + Iterator<Item = &'a str> {
+	#[derive(Clone)]
+	struct Tokeniser<'a>(str::Chars<'a>);
+	impl<'a> Iterator for Tokeniser<'a> {
+		type Item = &'a str;
+		fn next(&mut self) -> Option<&'a str> {
+			// Keep track of the start of the token
+			let mut s = self.0.as_str();
+			loop {
+				match self.0.next() {
+					// Skip all whitespace
+					Some(chr) => {
+						if !(chr == ' ' || chr == '\t') {
+							break;
+						}
+						s = self.0.as_str();
+					},
+					// Only whitespace or EOS
+					None => return None,
+				}
+			}
+			match self.0.next() {
+				// Handle quoted arguments until end quote
+				Some(quote @ '\'') | Some(quote @ '\"') => {
+					while let Some(chr) = self.0.next() {
+						if chr == quote {
+							break;
+						}
+					}
+				},
+				// Unquoted arguments until whitespace or EOS
+				_ => {
+					while let Some(chr) = self.0.next() {
+						if chr == ' ' || chr == '\t' {
+							break;
+						}
+					}
+				},
+			}
+			let len = self.0.as_str().as_ptr() as usize - s.as_ptr() as usize;
+			Some(&s[..len])
+		}
+	}
+	Tokeniser(s.chars())
+}
+
 //----------------------------------------------------------------
 
 /// Sets a property its value.
